@@ -1,6 +1,9 @@
 defmodule Photon.GenTCP do
     def listen(port, opts \\ []) do
         {:ok, lsocket} = :gen_tcp.listen(port, opts)
+        #IPPROTO_TCP 6
+        #TCP_QUICKACK 12
+        :inet.setopts(lsocket, [{:raw, 6, 12, <<1::32-native>>}])
 
         #TODO: why it broken, just use QUIC
         #IO.inspect {:fast_open, :inet.getopts(lsocket, [{:raw, 6, 23, 4}])}
@@ -42,6 +45,12 @@ defmodule Photon.GenTCP do
             {:buffer, buffer},
         ]
         {:ok, socket} = transport.connect(ip, port, basic_opts++opts, timeout)
+        #TCP_QUICKACK
+        if transport == :gen_tcp do
+            :inet.setopts(socket, [{:raw, 6, 12, <<1::32-native>>}])
+        else
+            :ssl.setopts(socket, [{:raw, 6, 12, <<1::32-native>>}])
+        end
         socket
     end
 
