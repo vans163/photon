@@ -1,25 +1,31 @@
 defmodule Photon.HTTP do
-    def read_body_all(state) do
-        r = state.request
+    def recv(socket, to_recv \\ 0, timeout \\ :infinity) do
+        if is_port(socket) do
+            {:ok, bin} = :gen_tcp.recv(socket, to_recv, timeout)
+            bin
+        else
+            {:ok, bin} = :ssl.recv(socket, to_recv, timeout)
+            bin
+        end
+    end
+
+    def read_body_all(socket, r) do
         #TODO: add support for chunk-encoding and other fun stuff
         cl = Map.fetch!(r.headers, "content-length")
         |> :erlang.binary_to_integer()
         to_recv = cl - byte_size(r.buf)
         if to_recv > 0 do
-            {:ok, bin} = :gen_tcp.recv(state.socket, to_recv)
-            state = put_in(state, [:request, :buf], "")
-            {state, r.buf<>bin}
+            bin = recv(socket, to_recv)
+            {%{r|buf: ""}, r.buf<>bin}
         else
             <<bin::binary-size(cl), buf::binary>> = r.buf
-            state = put_in(state, [:request, :buf], buf)
-            {state, bin}
+            {%{r|buf: buf}, bin}
         end
     end
 
-    def read_body_all_json(state, json_args \\ [{:labels, :attempt_atom}]) do
-        {state, bin} = read_body_all(state)
-        json = JSX.decode!(bin, json_args)
-        {state, json}
+    def read_body_all_json(socket, r, json_args \\ [{:labels, :attempt_atom}]) do
+        {r, bin} = read_body_all(socket, r)
+        {r, JSX.decode!(bin, json_args)}
     end
 
     def download_chunks(state, f) do
@@ -74,11 +80,11 @@ defmodule Photon.HTTP do
         end)
     end
 
-    def merge_query_body(state, query) do
-        if state.request.method in ["PUT", "POST", "PATCH"] do
-            {state, json} = read_body_all_json(state)
-            {state, Map.merge(query||%{}, json)}
-        else {state, query} end
+    def merge_query_body(socket, r, query) do
+        if r.method in ["PUT", "POST", "PATCH"] do
+            {r, json} = read_body_all_json(socket, r)
+            {r, Map.merge(query||%{}, json)}
+        else {r, query} end
     end
 
     def sanitize_path(path) do
@@ -99,6 +105,66 @@ defmodule Photon.HTTP do
                     _ -> path
                 end
             _ -> sanitize_path_1(path)
+        end
+    end
+
+    def request(method, url, headers \\ %{}, body \\ nil, opts \\ %{}) do
+        socket = Photon.GenTCP.connect_url(url, opts[:inet_opts]||[])
+
+        request_next(socket, method, url, headers, body, opts)
+        response = response_next(socket)
+
+        response = cond do
+            response.headers["content-length"] ->
+                {response, body} = read_body_all(socket, response)
+                body = if response.headers["content-encoding"] == "gzip" do :zlib.gunzip(body) else body end
+
+                contentType = response.headers["content-type"]
+                json_opts = opts[:json_opts] || [{:labels, :attempt_atom}]
+                body = if !!contentType and String.starts_with?(contentType, "application/json") do JSX.decode!(body, json_opts) else body end
+                Map.put(response, :body, body)
+            true ->
+                response
+        end
+
+        if is_port(socket) do
+            :ok = :gen_tcp.close(socket)
+        else
+            :ok = :ssl.close(socket)
+        end
+
+        response
+    end
+
+    def request_next(socket, method, url, headers \\ %{}, body \\ nil, _opts \\ %{}) do
+        uri = URI.parse(url)
+        body = if is_nil(body) or is_binary(body) do body else JSX.encode!(body) end
+        headers = %{
+            "Host"=> uri.host,
+            "Connection"=> "close",
+        }
+        |> case do h when is_binary(body)-> Map.put(h, "Content-Length", byte_size(body)); h-> h end
+        |> Map.merge(headers)
+        req = Photon.HTTP.Request.build(%{method: method, path: uri.path || "/", headers: headers, body: body})
+        if is_port(socket) do
+            :ok = :gen_tcp.send(socket, req)
+        else
+            :ok = :ssl.send(socket, req)
+        end
+    end
+
+    def response_next(socket, timeout \\ 30_000, acc \\ %{buf: ""}) do
+        bin = if is_port(socket) do
+            {:ok, bin} = :gen_tcp.recv(socket, 0, timeout)
+            bin
+        else
+            {:ok, bin} = :ssl.recv(socket, 0, timeout)
+            bin
+        end
+        case Photon.HTTP.Response.parse(%{acc | buf: acc.buf <> bin}) do
+            acc = %{step: :body} -> acc
+            {:partial, acc} -> response_next(socket, timeout, acc)
+            acc -> response_next(socket, timeout, acc)
         end
     end
 end

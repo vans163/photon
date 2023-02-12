@@ -33,7 +33,7 @@ defmodule Photon.GenTCP do
         listen(port, basic_opts++opts)
     end
 
-    def connect(ip, port, opts \\ [], transport \\ :gen_tcp, timeout \\ 8_000) do
+    def connect(ip, port, opts \\ [], transport \\ :gen_tcp) do
         buffer = 131072
         basic_opts = [
             #{:inet_backend, :socket}, #not supported for SSL? :()
@@ -44,7 +44,7 @@ defmodule Photon.GenTCP do
             :binary,
             {:buffer, buffer},
         ]
-        {:ok, socket} = transport.connect(ip, port, basic_opts++opts, timeout)
+        {:ok, socket} = transport.connect(ip, port, basic_opts++opts, 8_000)
         #TCP_QUICKACK
         if transport == :gen_tcp do
             :inet.setopts(socket, [{:raw, 6, 12, <<1::32-native>>}])
