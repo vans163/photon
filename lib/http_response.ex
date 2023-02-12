@@ -41,14 +41,15 @@ defmodule Photon.HTTP.Response do
     end
 
     def build_cors(request, status_code\\ 200, extra_headers \\ %{}, body \\ "") do
-        headers = %{"Content-Type": "application/json; charset=utf-8"}
+        headers = %{}
         |> Photon.HTTP.Headers.add_cors()
         |> Photon.HTTP.Headers.add_date()
         |> Photon.HTTP.Headers.add_connection(request)
 
-        body = cond do
-            is_map(body) or is_list(body) -> JSX.encode!(body)
-            true -> body
+        {headers, body} = cond do
+            is_map(body) or is_list(body) -> 
+                {Map.put(headers, "Content-Type", "application/json; charset=utf-8"), JSX.encode!(body)}
+            true -> {headers, body}
         end
         headers = if !!headers["Content-Length"] or !!headers["content-length"] do headers else
             Map.put(headers, "Content-Length", "#{byte_size(body)}")
