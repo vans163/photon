@@ -27,6 +27,7 @@ defmodule Photon.Util do
         |> String.to_charlist()
         |> Enum.filter(fn(char)->
             char in 97..122
+            || char in 48..57
             || char == 45 # -
         end)
         |> List.to_string()
