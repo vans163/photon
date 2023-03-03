@@ -51,7 +51,7 @@ defmodule Photon.HTTP.Response do
                 {Map.put(headers, "Content-Type", "application/json; charset=utf-8"), JSX.encode!(body)}
             true -> {headers, body}
         end
-        headers = if !!headers["Content-Length"] or !!headers["content-length"] do headers else
+        headers = if !!extra_headers["Content-Length"] or !!extra_headers["content-length"] do headers else
             Map.put(headers, "Content-Length", "#{byte_size(body)}")
         end
         extra_headers = Enum.into(extra_headers, %{}, fn{k,v}-> {"#{k}",v} end)
