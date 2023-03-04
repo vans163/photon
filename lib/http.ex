@@ -30,32 +30,64 @@ defmodule Photon.HTTP do
 
     def download_chunks(state, f) do
         r = state.request
-        #TODO: support chunked
-        cl = Map.fetch!(r.headers, "content-length") |> :erlang.binary_to_integer()
-        to_recv = cl - byte_size(r.buf)
-        if to_recv > 0 do
-            :file.write(f, r.buf)
-            download_chunks_1(state, f, to_recv)
-        else
-            <<bin::binary-size(cl), buf::binary>> = r.buf
-            :file.write(f, bin)
-            put_in(state, [:request, :buf], buf)
+        cond do
+            r.headers["content-length"] ->
+                cl = Map.fetch!(r.headers, "content-length") |> :erlang.binary_to_integer()
+                to_recv = cl - byte_size(r.buf)
+                if to_recv > 0 do
+                    :ok = :file.write(f, r.buf)
+                    download_chunks_1(state, f, to_recv)
+                else
+                    <<bin::binary-size(cl), buf::binary>> = r.buf
+                    :ok = :file.write(f, bin)
+                    put_in(state, [:request, :buf], buf)
+                end
+            #r.headers["transfer-encoding"] == "chunked" ->
+            true -> download_chunked_encoding(state, f)
         end
     end
 
-    def download_chunks_1(state, f, to_recv) do
+    defp download_chunks_1(state, f, to_recv) do
         #TODO: autoscale bigger buffer for faster inet
         chunk = min(to_recv, 8_388_608)
         {:ok, bin} = :gen_tcp.recv(state.socket, chunk, 120_000)
         recv_size = byte_size(bin)
         left = to_recv - recv_size
         if left > 0 do
-            :file.write(f, bin)
+            :ok = :file.write(f, bin)
             download_chunks_1(state, f, left)
         else
             <<payload::binary-size(to_recv), buf::binary>> = bin
-            :file.write(f, payload)
+            :ok = :file.write(f, payload)
             put_in(state, [:request, :buf], buf)
+        end
+    end
+
+    defp download_chunked_encoding(state, f) do
+        case :binary.split(state.request.buf, <<13,10>>) do
+            ["",""] -> :ok
+            ["0", rest] ->
+                state = put_in(state, [:request, :buf], rest)
+                download_chunked_encoding(state, f)
+            [chunk_size, rest] ->
+                chunk_size = :httpd_util.hexlist_to_integer('#{chunk_size}')
+                case rest do
+                    <<bin::binary-size(chunk_size), "\r\n", rest::binary>> ->
+                        :ok = :file.write(f, bin)
+                        state = put_in(state, [:request, :buf], rest)
+                        download_chunked_encoding(state, f)
+                    _ ->
+                        {:ok, extra} = :gen_tcp.recv(state.socket, 0, 120_000)
+                        state = put_in(state, [:request, :buf], state.request.buf<>extra)
+                        download_chunked_encoding(state, f)
+                end
+            [bin] ->
+                if byte_size(bin) > 16 do
+                    throw %{error: :photon_chunked_encoding_no_chunk}
+                end
+                {:ok, extra} = :gen_tcp.recv(state.socket, 0, 120_000)
+                state = put_in(state, [:request, :buf], state.request.buf<>extra)
+                download_chunked_encoding(state, f)
         end
     end
 
