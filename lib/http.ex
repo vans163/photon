@@ -1,21 +1,11 @@
 defmodule Photon.HTTP do
-    def recv(socket, to_recv \\ 0, timeout \\ :infinity) do
-        if is_port(socket) do
-            {:ok, bin} = :gen_tcp.recv(socket, to_recv, timeout)
-            bin
-        else
-            {:ok, bin} = :ssl.recv(socket, to_recv, timeout)
-            bin
-        end
-    end
-
     def read_body_all(socket, r) do
         #TODO: add support for chunk-encoding and other fun stuff
         cl = Map.fetch!(r.headers, "content-length")
         |> :erlang.binary_to_integer()
         to_recv = cl - byte_size(r.buf)
         if to_recv > 0 do
-            bin = recv(socket, to_recv)
+            bin = Photon.GenTCP.recv(socket, to_recv)
             {%{r|buf: ""}, r.buf<>bin}
         else
             <<bin::binary-size(cl), buf::binary>> = r.buf
@@ -70,7 +60,7 @@ defmodule Photon.HTTP do
                 state = put_in(state, [:request, :buf], rest)
                 download_chunked_encoding(state, f)
             [chunk_size, rest] ->
-                chunk_size = :httpd_util.hexlist_to_integer('#{chunk_size}')
+                chunk_size = :erlang.binary_to_integer(chunk_size, 16)
                 case rest do
                     <<bin::binary-size(chunk_size), "\r\n", rest::binary>> ->
                         :ok = :file.write(f, bin)
@@ -159,10 +149,9 @@ defmodule Photon.HTTP do
                 response
         end
 
-        if is_port(socket) do
-            :ok = :gen_tcp.close(socket)
-        else
-            :ok = :ssl.close(socket)
+        case socket do
+            {:sslsocket, _, _} -> :ok = :ssl.close(socket)
+            _ -> :ok = :gen_tcp.close(socket)
         end
 
         response
@@ -178,21 +167,14 @@ defmodule Photon.HTTP do
         |> case do h when is_binary(body)-> Map.put(h, "Content-Length", byte_size(body)); h-> h end
         |> Map.merge(headers)
         req = Photon.HTTP.Request.build(%{method: method, path: uri.path || "/", headers: headers, body: body})
-        if is_port(socket) do
-            :ok = :gen_tcp.send(socket, req)
-        else
-            :ok = :ssl.send(socket, req)
-        end
+        case socket do
+            {:sslsocket, _, _} -> :ok = :ssl.send(socket, req)
+            _ -> :ok = :gen_tcp.send(socket, req)
+         end
     end
 
     def response_next(socket, timeout \\ 30_000, acc \\ %{buf: ""}) do
-        bin = if is_port(socket) do
-            {:ok, bin} = :gen_tcp.recv(socket, 0, timeout)
-            bin
-        else
-            {:ok, bin} = :ssl.recv(socket, 0, timeout)
-            bin
-        end
+        bin = Photon.GenTCP.recv(socket, 0, timeout)
         case Photon.HTTP.Response.parse(%{acc | buf: acc.buf <> bin}) do
             acc = %{step: :body} -> acc
             {:partial, acc} -> response_next(socket, timeout, acc)

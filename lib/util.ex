@@ -51,7 +51,7 @@ end
 
 defmodule U do
   def b(term) do
-    Util.sbash(term)
+    Photon.Util.sbash(term)
   end
 end
 

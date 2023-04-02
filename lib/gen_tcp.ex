@@ -74,17 +74,27 @@ defmodule Photon.GenTCP do
     end
 
     #Misc
-    def setopts(socket, opts) when is_port(socket) do
-        :inet.setopts(socket, opts)
-    end
-    def setopts(socket, opts) when is_tuple(socket) do
+    def setopts(socket={:sslsocket, _, _}, opts) do
         :ssl.setopts(socket, opts)
     end
+    def setopts(socket, opts) do
+        :inet.setopts(socket, opts)
+    end
 
-    def send(socket, bin) when is_port(socket) do
+    def send(socket={:sslsocket, _, _}, bin) do
+        :ssl.send(socket, bin)
+    end
+    def send(socket, bin) do
         :gen_tcp.send(socket, bin)
     end
-    def send(socket, bin) when is_tuple(socket) do
-        :ssl.send(socket, bin)
+
+    def recv(socket, to_recv \\ 0, timeout \\ :infinity)
+    def recv(socket={:sslsocket, _, _}, to_recv, timeout) do
+        {:ok, bin} = :ssl.recv(socket, to_recv, timeout)
+        bin
+    end
+    def recv(socket, to_recv, timeout) do
+        {:ok, bin} = :gen_tcp.recv(socket, to_recv, timeout)
+        bin
     end
 end
