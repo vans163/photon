@@ -134,7 +134,8 @@ defmodule Photon.HTTP do
         socket = Photon.GenTCP.connect_url(url, opts[:inet_opts]||[])
 
         request_next(socket, method, url, headers, body, opts)
-        response = response_next(socket)
+        timeout = opts[:timeout] || 30_000
+        response = response_next(socket, timeout)
 
         response = cond do
             response.headers["content-length"] ->
