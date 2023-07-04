@@ -30,6 +30,9 @@ defmodule Photon.HTTP.Response do
             status_code == 200 -> "OK"
             status_code == 302 -> "Found"
             status_code == 404 -> "Not Found"
+            status_code == 418 -> "I'm a teapot"
+            status_code == 422 -> "Unprocessable Content"
+            status_code == 503 -> "Service Unavailable"
             true -> "OK"
         end
     end
