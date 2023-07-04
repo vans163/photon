@@ -57,19 +57,24 @@ defmodule Photon.GenTCP do
     def connect_url(url, opts \\ []) do
         uri = URI.parse(url)
         port = cond do uri.port -> uri.port; uri.scheme in ["http","ws"] -> 80; uri.scheme in ["https","wss"] -> 443 end
-        if uri.scheme in ["https", "wss"] do
-            ssl_opts = [
-                {:server_name_indication, '#{URI.parse(url).host}'},
-                {:verify,:verify_peer},
-                {:depth,99},
-                {:cacerts, :certifi.cacerts()},
-                #{:verify_fun, verifyFun},
-                {:partial_chain, &Photon.SSLPin.partial_chain/1},
-                {:customize_hostname_check, [{:match_fun, :public_key.pkix_verify_hostname_match_fun(:https)}]}
-            ]
-            connect('#{uri.host}', port, ssl_opts++opts, :ssl)
-        else
-            connect('#{uri.host}', port, opts)
+        {host_parse_err, host_parsed} = :inet.parse_ipv4_address('#{uri.host}')
+        {host_parse_err, host_parsed} = if host_parse_err == :ok do {host_parse_err, host_parsed} else
+            :inet.parse_ipv6_address('#{uri.host}')
+        end
+        cond do
+            uri.scheme in ["https", "wss"] ->
+                ssl_opts = [
+                    {:server_name_indication, '#{uri.host}'},
+                    {:verify,:verify_peer},
+                    {:depth,99},
+                    {:cacerts, :certifi.cacerts()},
+                    #{:verify_fun, verifyFun},
+                    {:partial_chain, &Photon.SSLPin.partial_chain/1},
+                    {:customize_hostname_check, [{:match_fun, :public_key.pkix_verify_hostname_match_fun(:https)}]}
+                ]
+                connect('#{uri.host}', port, ssl_opts++opts, :ssl)
+            host_parse_err == :ok -> connect(host_parsed, port, opts)
+            true -> connect('#{uri.host}', port, opts)
         end
     end
 
