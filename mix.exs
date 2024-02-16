@@ -22,7 +22,7 @@ defmodule Photon.MixProject do
       {:exjsx, "~> 4.0.0"},
       
       #for cert pin
-      {:certifi, git: "https://github.com/certifi/erlang-certifi"},
+      {:certifi, "~> 2.0", optional: true},
       {:ssl_verify_fun, git: "https://github.com/deadtrickster/ssl_verify_fun.erl"},
       {:parse_trans, git: "https://github.com/uwiger/parse_trans"},
     ]
