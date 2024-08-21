@@ -23,7 +23,7 @@ defmodule Photon.MixProject do
       
       #for cert pin
       {:certifi, "~> 2.0", optional: true},
-      {:ssl_verify_fun, git: "https://github.com/deadtrickster/ssl_verify_fun.erl"},
+      {:ssl_verify_fun, "~> 1.1", [env: :prod, hex: "ssl_verify_fun", repo: "hexpm", optional: false]},
       {:parse_trans, git: "https://github.com/uwiger/parse_trans"},
     ]
   end
