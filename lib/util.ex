@@ -86,4 +86,7 @@ defmodule Base58 do
     do: decode_1(tail, acc * 58 + Enum.find_index(@alnum, &(&1 == head)))
 
   def decode_to_int(encoded), do: encoded |> decode() |> :binary.decode_unsigned(:big)
+
+  @base58_re ~r/^[#{@alphabet}]+$/
+  def likely(s) when is_binary(s) do String.match?(s, @base58_re) end
 end
