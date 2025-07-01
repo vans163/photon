@@ -87,6 +87,6 @@ defmodule Base58 do
 
   def decode_to_int(encoded), do: encoded |> decode() |> :binary.decode_unsigned(:big)
 
-  @base58_re ~r/^[#{@alphabet}]+$/
+  @base58_re ~r/^[#{@alnum}]+$/
   def likely(s) when is_binary(s) do String.match?(s, @base58_re) end
 end
