@@ -81,6 +81,7 @@ defmodule Base58 do
     :binary.copy(<<0>>, zeros) <> decoded
   end
 
+  def decode_1("", 0), do: ""
   def decode_1("", acc), do: :binary.encode_unsigned(acc, :big)
   def decode_1(<<head, tail::binary>>, acc),
     do: decode_1(tail, acc * 58 + Enum.find_index(@alnum, &(&1 == head)))
