@@ -1,7 +1,0 @@
-%{
-  "certifi": {:git, "https://github.com/certifi/erlang-certifi", "da653d2b14e9daf0dde493acbf622b0d3cedc8c3", []},
-  "exjsx": {:hex, :exjsx, "4.0.0", "60548841e0212df401e38e63c0078ec57b33e7ea49b032c796ccad8cde794b5c", [:mix], [{:jsx, "~> 2.8.0", [hex: :jsx, repo: "hexpm", optional: false]}], "hexpm", "32e95820a97cffea67830e91514a2ad53b888850442d6d395f53a1ac60c82e07"},
-  "jsx": {:hex, :jsx, "2.8.3", "a05252d381885240744d955fbe3cf810504eb2567164824e19303ea59eef62cf", [:mix, :rebar3], [], "hexpm", "fc3499fed7a726995aa659143a248534adc754ebd16ccd437cd93b649a95091f"},
-  "parse_trans": {:git, "https://github.com/uwiger/parse_trans", "cdb01ba260ba9a00b2aafa17affead0f6fac081c", []},
-  "ssl_verify_fun": {:git, "https://github.com/deadtrickster/ssl_verify_fun.erl", "b503f3e1a0397c495dca9930f131613190cea25b", []},
-}

@@ -79,14 +79,14 @@ defmodule Photon.GenTCP do
     end
 
     #Misc
-    def setopts(socket={:sslsocket, _, _}, opts) do
+    def setopts(socket, opts) when is_tuple(socket) and :erlang.element(1, socket) == :sslsocket do
         :ssl.setopts(socket, opts)
     end
     def setopts(socket, opts) do
         :inet.setopts(socket, opts)
     end
 
-    def send(socket={:sslsocket, _, _}, bin) do
+    def send(socket, bin) when is_tuple(socket) and :erlang.element(1, socket) == :sslsocket do
         :ssl.send(socket, bin)
     end
     def send(socket, bin) do
@@ -94,7 +94,7 @@ defmodule Photon.GenTCP do
     end
 
     def recv(socket, to_recv \\ 0, timeout \\ :infinity)
-    def recv(socket={:sslsocket, _, _}, to_recv, timeout) do
+    def recv(socket, to_recv, timeout) when is_tuple(socket) and :erlang.element(1, socket) == :sslsocket do
         {:ok, bin} = :ssl.recv(socket, to_recv, timeout)
         bin
     end
