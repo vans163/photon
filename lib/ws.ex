@@ -192,4 +192,20 @@ defmodule Photon.WS do
         <<1::1, rsv1::1, 0::1, 0::1, type::4, 0::1, 126::7, (byte_size(bin))::16, bin::binary>>
     def encode(bin, rsv1, type), do:
         <<1::1, rsv1::1, 0::1, 0::1, type::4, 0::1, 127::7, (byte_size(bin))::64, bin::binary>>
+
+    def encode_mask(:close_normal), do: encode_mask(<<3, 232>>, 0, 8)
+    def encode_mask(:ping), do: encode_mask(<<>>, 0, 9)
+    def encode_mask(:pong), do: encode_mask(<<>>, 0, 10)
+    def encode_mask(:close, bin), do: encode_mask(bin, 0, 8)
+    def encode_mask(:text, bin), do: encode_mask(bin, 0, 1)
+    def encode_mask(:text_compress, bin), do: encode_mask(bin, 1, 1)
+    def encode_mask(:bin, bin), do: encode_mask(bin, 0, 2)
+    def encode_mask(:bin_compress, bin), do: encode_mask(bin, 1, 2)
+
+    def encode_mask(bin, rsv1, type) when byte_size(bin) <= 125, do:
+        <<1::1, rsv1::1, 0::1, 0::1, type::4, 1::1, (byte_size(bin))::7, 0::32, bin::binary>>
+    def encode_mask(bin, rsv1, type) when byte_size(bin) <= 65536, do:
+        <<1::1, rsv1::1, 0::1, 0::1, type::4, 1::1, 126::7, (byte_size(bin))::16, 0::32, bin::binary>>
+    def encode_mask(bin, rsv1, type), do:
+        <<1::1, rsv1::1, 0::1, 0::1, type::4, 1::1, 127::7, (byte_size(bin))::64, 0::32, bin::binary>>
 end
