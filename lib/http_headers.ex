@@ -58,7 +58,7 @@ defmodule Photon.HTTP.Headers do
         Map.merge(headers, %{
             "Access-Control-Allow-Origin" => "*",
             "Access-Control-Allow-Methods" => "HEAD, OPTIONS, PATH, GET, POST, PUT, DELETE",
-            "Access-Control-Allow-Headers" => "Cache-Control, Pragma, Origin, Authorization, Content-Type, X-Requested-With, Location, Extra, Filename",
+            "Access-Control-Allow-Headers" => "User-Agent, Cache-Control, Pragma, Origin, Authorization, Content-Type, X-Auth-Token, X-Client-Type, X-Requested-With, Location, Extra, Filename, If-Modified-Since, DNT, Accept",
         })
     end
 
