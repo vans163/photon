@@ -151,7 +151,7 @@ defmodule Photon.HTTP do
         end
 
         case socket do
-            {:sslsocket, _, _} -> :ok = :ssl.close(socket)
+            socket when is_tuple(socket) and :erlang.element(1, socket) == :sslsocket -> :ok = :ssl.close(socket)
             _ -> :ok = :gen_tcp.close(socket)
         end
 
@@ -169,7 +169,7 @@ defmodule Photon.HTTP do
         |> Map.merge(headers)
         req = Photon.HTTP.Request.build(%{method: method, path: uri.path || "/", headers: headers, body: body})
         case socket do
-            {:sslsocket, _, _} -> :ok = :ssl.send(socket, req)
+            socket when is_tuple(socket) and :erlang.element(1, socket) == :sslsocket -> :ok = :ssl.send(socket, req)
             _ -> :ok = :gen_tcp.send(socket, req)
          end
     end
