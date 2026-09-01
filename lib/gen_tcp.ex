@@ -93,6 +93,13 @@ defmodule Photon.GenTCP do
         :gen_tcp.send(socket, bin)
     end
 
+    def close(socket) when is_tuple(socket) and :erlang.element(1, socket) == :sslsocket do
+        :ssl.close(socket)
+    end
+    def close(socket) do
+        :gen_tcp.close(socket)
+    end
+
     def recv(socket, to_recv \\ 0, timeout \\ :infinity)
     def recv(socket, to_recv, timeout) when is_tuple(socket) and :erlang.element(1, socket) == :sslsocket do
         {:ok, bin} = :ssl.recv(socket, to_recv, timeout)

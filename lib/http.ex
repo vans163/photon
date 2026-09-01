@@ -1,16 +1,56 @@
 defmodule Photon.HTTP do
     def read_body_all(socket, r) do
-        #TODO: add support for chunk-encoding and other fun stuff
-        cl = Map.fetch!(r.headers, "content-length")
-        |> :erlang.binary_to_integer()
-        to_recv = cl - byte_size(r.buf)
-        if to_recv > 0 do
-            bin = Photon.GenTCP.recv(socket, to_recv)
-            {%{r|buf: ""}, r.buf<>bin}
-        else
-            <<bin::binary-size(cl), buf::binary>> = r.buf
-            {%{r|buf: buf}, bin}
+        cond do
+            String.contains?(r.headers["transfer-encoding"]||"", "chunked") ->
+                {leftover, body} = read_body_chunked(socket, r.buf, <<>>)
+                {%{r|buf: leftover}, body}
+
+            true ->
+                cl = Map.fetch!(r.headers, "content-length")
+                |> :erlang.binary_to_integer()
+                to_recv = cl - byte_size(r.buf)
+                if to_recv > 0 do
+                    bin = Photon.GenTCP.recv(socket, to_recv)
+                    {%{r|buf: ""}, r.buf<>bin}
+                else
+                    <<bin::binary-size(cl), buf::binary>> = r.buf
+                    {%{r|buf: buf}, bin}
+                end
         end
+    end
+
+    #chunked transfer bounded by chunk framing (keep-alive safe); leftover buf returned
+    def read_body_chunked(socket, buf, acc) do
+        case :binary.split(buf, "\r\n") do
+            [size_line, rest] ->
+                [hexsize | _] = :binary.split(size_line, ";")
+                size = :erlang.binary_to_integer(String.trim(hexsize), 16)
+                if size == 0 do
+                    {read_chunk_trailer(socket, rest), acc}
+                else
+                    {chunk, rest} = take_bytes(socket, rest, size + 2)
+                    <<data::binary-size(size), _crlf::binary>> = chunk
+                    read_body_chunked(socket, rest, acc<>data)
+                end
+            [partial] ->
+                read_body_chunked(socket, partial <> Photon.GenTCP.recv(socket, 0, 30_000), acc)
+        end
+    end
+
+    #consume optional trailer headers up to the terminating empty line
+    def read_chunk_trailer(socket, buf) do
+        case :binary.split(buf, "\r\n") do
+            ["", rest] -> rest
+            [_line, rest] -> read_chunk_trailer(socket, rest)
+            [partial] -> read_chunk_trailer(socket, partial <> Photon.GenTCP.recv(socket, 0, 30_000))
+        end
+    end
+
+    def take_bytes(_socket, buf, n) when byte_size(buf) >= n do
+        {:erlang.binary_part(buf, 0, n), :erlang.binary_part(buf, n, byte_size(buf) - n)}
+    end
+    def take_bytes(socket, buf, n) do
+        take_bytes(socket, buf <> Photon.GenTCP.recv(socket, 0, 30_000), n)
     end
 
     def read_body_all_json(socket, r, json_args \\ [{:labels, :attempt_atom}]) do
@@ -137,8 +177,29 @@ defmodule Photon.HTTP do
         timeout = opts[:timeout] || 30_000
         response = response_next(socket, timeout)
 
-        response = cond do
-            response.headers["content-length"] ->
+        response = proc_response_body(socket, response, opts)
+
+        case socket do
+            socket when is_tuple(socket) and :erlang.element(1, socket) == :sslsocket -> :ok = :ssl.close(socket)
+            _ -> :ok = :gen_tcp.close(socket)
+        end
+
+        response
+    end
+
+    #keep-alive: run many requests over a caller-owned socket (Photon.GenTCP.connect_url);
+    #the socket is NOT closed here — on errors close it (Photon.GenTCP.close) and reconnect
+    def request_on(socket, method, url, headers \\ %{}, body \\ nil, opts \\ %{}) do
+        headers = Map.merge(%{"Connection"=> "keep-alive"}, headers)
+        request_next(socket, method, url, headers, body, opts)
+        timeout = opts[:timeout] || 30_000
+        response = response_next(socket, timeout)
+        proc_response_body(socket, response, opts)
+    end
+
+    def proc_response_body(socket, response, opts) do
+        cond do
+            response.headers["content-length"] || String.contains?(response.headers["transfer-encoding"]||"", "chunked") ->
                 {response, body} = read_body_all(socket, response)
                 body = if response.headers["content-encoding"] == "gzip" do :zlib.gunzip(body) else body end
 
@@ -149,13 +210,6 @@ defmodule Photon.HTTP do
             true ->
                 response
         end
-
-        case socket do
-            socket when is_tuple(socket) and :erlang.element(1, socket) == :sslsocket -> :ok = :ssl.close(socket)
-            _ -> :ok = :gen_tcp.close(socket)
-        end
-
-        response
     end
 
     def request_next(socket, method, url, headers \\ %{}, body \\ nil, _opts \\ %{}) do
@@ -167,7 +221,8 @@ defmodule Photon.HTTP do
         }
         |> case do h when is_binary(body)-> Map.put(h, "Content-Length", byte_size(body)); h-> h end
         |> Map.merge(headers)
-        req = Photon.HTTP.Request.build(%{method: method, path: uri.path || "/", headers: headers, body: body})
+        path = (uri.path || "/") <> (if uri.query, do: "?"<>uri.query, else: "")
+        req = Photon.HTTP.Request.build(%{method: method, path: path, headers: headers, body: body})
         case socket do
             socket when is_tuple(socket) and :erlang.element(1, socket) == :sslsocket -> :ok = :ssl.send(socket, req)
             _ -> :ok = :gen_tcp.send(socket, req)

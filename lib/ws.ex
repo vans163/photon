@@ -40,8 +40,9 @@ defmodule Photon.WS do
             "Sec-WebSocket-Key"=> key
         }
         headers = Map.merge(headers2, headers)
+        path = (uri.path || "/") <> (if uri.query, do: "?"<>uri.query, else: "")
         Photon.HTTP.Request.build(
-            %{method: "GET", path: uri.path || "/", status_code: 101, headers: headers})
+            %{method: "GET", path: path, status_code: 101, headers: headers})
     end
 
     def handshake(request, opts) do
