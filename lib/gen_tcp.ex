@@ -34,6 +34,11 @@ defmodule Photon.GenTCP do
     end
 
     def connect(ip, port, opts \\ [], transport \\ :gen_tcp) do
+        #:connect_timeout is ours, not an inet/ssl option: take it out before handing opts to the transport
+        {connect_timeout, opts} = case :lists.keytake(:connect_timeout, 1, opts) do
+            {:value, {_, t}, rest} -> {t, rest}
+            false -> {8_000, opts}
+        end
         buffer = 131072
         basic_opts = [
             #{:inet_backend, :socket}, #not supported for SSL? :()
@@ -44,7 +49,7 @@ defmodule Photon.GenTCP do
             :binary,
             {:buffer, buffer},
         ]
-        {:ok, socket} = transport.connect(ip, port, basic_opts++opts, 8_000)
+        {:ok, socket} = transport.connect(ip, port, basic_opts++opts, connect_timeout)
         #TCP_QUICKACK
         if transport == :gen_tcp do
             :inet.setopts(socket, [{:raw, 6, 12, <<1::32-native>>}])

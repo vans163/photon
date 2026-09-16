@@ -5,12 +5,17 @@ defmodule Photon.WS do
         req = build_connect(url, headers)
         uri = URI.parse(url)
         transport = if uri.scheme == "wss", do: :ssl, else: :gen_tcp
+        #:handshake_timeout is ours too; connect_url passes the rest through to the transport
+        {handshake_timeout, opts} = case :lists.keytake(:handshake_timeout, 1, opts) do
+            {:value, {_, t}, rest} -> {t, rest}
+            false -> {30_000, opts}
+        end
         socket = Photon.GenTCP.connect_url(url, opts)
         :ok = transport.send(socket, req)
 
         #TODO make this nicer :P
         buf = Enum.reduce_while(1..6, %{buf: <<>>}, fn(_, response)->
-            {:ok, bin} = transport.recv(socket, 0, 30_000)
+            {:ok, bin} = transport.recv(socket, 0, handshake_timeout)
             response = %{buf: response.buf <> bin}
             response = Photon.HTTP.Response.parse(response)
             cond do
