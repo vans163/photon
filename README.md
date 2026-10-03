@@ -88,7 +88,7 @@ defmodule Ex.MultiServer do
                                 if request.headers["connection"] in ["close", "upgrade"] do
                                     :gen_tcp.shutdown(socket, :write)
                                 else
-                                    {_, state} = pop_in(state, [:request, :step])
+                                    state = put_in(state, [:request], %{buf: Photon.HTTP.request_rest(state.request)})
                                     :inet.setopts(socket, [{:active, :once}])
                                     loop_http(state)
                                 end

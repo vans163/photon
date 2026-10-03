@@ -1,4 +1,10 @@
 defmodule Photon.HTTP do
+    def request_rest(r) do
+        if r[:body_read] == true or not has_body?(r), do: r.buf, else: throw(:error_unread_body)
+    end
+
+    defp has_body?(r), do: r.headers["content-length"] not in [nil, "0"] or Map.has_key?(r.headers, "transfer-encoding")
+
     def read_body_all(socket, r) do
         cond do
             String.contains?(r.headers["transfer-encoding"]||"", "chunked") ->
@@ -17,6 +23,7 @@ defmodule Photon.HTTP do
                     {%{r|buf: buf}, bin}
                 end
         end
+        |> then(fn {r, body} -> {Map.put(r, :body_read, true), body} end)
     end
 
     #chunked transfer bounded by chunk framing (keep-alive safe); leftover buf returned
@@ -70,7 +77,8 @@ defmodule Photon.HTTP do
                 else
                     <<bin::binary-size(cl), buf::binary>> = r.buf
                     :ok = :file.write(f, bin)
-                    put_in(state, [:request, :buf], buf)
+                    state = put_in(state, [:request, :buf], buf)
+                    put_in(state, [:request, :body_read], true)
                 end
             #r.headers["transfer-encoding"] == "chunked" ->
             true -> download_chunked_encoding(state, f)
@@ -89,13 +97,16 @@ defmodule Photon.HTTP do
         else
             <<payload::binary-size(to_recv), buf::binary>> = bin
             :ok = :file.write(f, payload)
-            put_in(state, [:request, :buf], buf)
+            state = put_in(state, [:request, :buf], buf)
+            put_in(state, [:request, :body_read], true)
         end
     end
 
     defp download_chunked_encoding(state, f) do
         case :binary.split(state.request.buf, <<13,10>>) do
-            ["",""] -> :ok
+            ["",""] ->
+                state = put_in(state, [:request, :buf], "")
+                put_in(state, [:request, :body_read], true)
             ["0", rest] ->
                 state = put_in(state, [:request, :buf], rest)
                 download_chunked_encoding(state, f)
